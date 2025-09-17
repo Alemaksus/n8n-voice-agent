@@ -1,0 +1,387 @@
+{
+  "name": "Voice Agent MVP (Code nodes)",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "voice/intake",
+        "options": {},
+        "responseMode": "responseNode",
+        "httpMethod": "POST"
+      },
+      "name": "Webhook: Voice Intake",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -800,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "language": "JavaScript",
+        "jsCode": "const body = $json.body ?? $json;\nconst text = (body.transcript || body.text || '').toLowerCase();\n\nconst out = {\n  transcript: body.transcript || body.text || '',\n  intent: 'unknown',\n  city: body.city || null,\n  symbol: null,\n};\n\n// simple routing\nif (text.includes('weather') || text.includes('погода')) {\n  out.intent = 'weather';\n  if (!out.city) {\n    const m = text.match(/in\\s+([a-z\\- ]+)/) || text.match(/в\\s+([a-zа-я\\- ]+)/i);\n    if (m && m[1]) out.city = m[1].trim();\n  }\n  if (!out.city) out.city = 'Lisbon';\n}\n\nif (text.includes('btc') || text.includes('bitcoin') || text.includes('eth') || text.includes('ethereum') || text.includes('price')) {\n  if (out.intent !== 'weather') out.intent = 'crypto';\n  out.symbol = (text.includes('eth') || text.includes('ethereum')) ? 'ethereum' : 'bitcoin';\n}\n\nreturn [{ json: out }];"
+      },
+      "name": "Route Intent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -520,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.intent}}",
+              "operation": "equal",
+              "value2": "weather"
+            }
+          ]
+        }
+      },
+      "name": "IF Weather",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -300,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.intent}}",
+              "operation": "equal",
+              "value2": "crypto"
+            }
+          ]
+        }
+      },
+      "name": "IF Crypto",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -300,
+        40
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://geocoding-api.open-meteo.com/v1/search",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "name",
+              "value": "={{$json.city}}"
+            },
+            {
+              "name": "count",
+              "value": "1"
+            }
+          ]
+        }
+      },
+      "name": "HTTP: Geocode City",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -80,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "language": "JavaScript",
+        "jsCode": "const r = $json;\nif (!r.results || !Array.isArray(r.results) || r.results.length === 0) {\n  return [{ json: { error: 'CITY_NOT_FOUND', reply_text: 'I could not find that city. Please try another one.' } }];\n}\nconst g = r.results[0];\nreturn [{ json: { city: g.name, lat: g.latitude, lon: g.longitude } }];"
+      },
+      "name": "Fn: Extract Lat/Lon",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        160,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.open-meteo.com/v1/forecast",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "latitude",
+              "value": "={{$json.lat}}"
+            },
+            {
+              "name": "longitude",
+              "value": "={{$json.lon}}"
+            },
+            {
+              "name": "current_weather",
+              "value": "true"
+            },
+            {
+              "name": "timezone",
+              "value": "auto"
+            }
+          ]
+        }
+      },
+      "name": "HTTP: Get Weather",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        400,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine"
+      },
+      "name": "Merge: Weather + City",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [
+        640,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "language": "JavaScript",
+        "jsCode": "const cw = $json.current_weather;\nif (!cw) return [{ json: { reply_text: 'Weather data is not available right now.' } }];\nconst t = cw.temperature;\nconst city = $json.city || 'your city';\nreturn [{ json: { reply_text: `Now in ${city} it's ${t}°C.` } }];"
+      },
+      "name": "Fn: Format Weather Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.coingecko.com/api/v3/simple/price",
+        "options": {},
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "ids",
+              "value": "={{$json.symbol || 'bitcoin'}}"
+            },
+            {
+              "name": "vs_currencies",
+              "value": "usd"
+            }
+          ]
+        }
+      },
+      "name": "HTTP: Crypto Price",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -80,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "language": "JavaScript",
+        "jsCode": "const sym = $json.symbol || 'bitcoin';\nconst price = ($json[sym] && $json[sym].usd) ? $json[sym].usd : null;\nif (price == null) return [{ json: { reply_text: `I couldn't get the price for ${sym}.` } }];\nconst name = sym.charAt(0).toUpperCase() + sym.slice(1);\nreturn [{ json: { reply_text: `${name} price is ${price} USD.` } }];"
+      },
+      "name": "Fn: Format Crypto Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        160,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "language": "JavaScript",
+        "jsCode": "return [{ json: { reply_text: 'I can tell weather (e.g., \"weather in Lisbon\") or crypto price (e.g., \"BTC price\").' } }];"
+      },
+      "name": "Fn: Fallback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        160,
+        -40
+      ]
+    },
+    {
+      "parameters": {
+        "responseBody": "={{ { \"reply_text\": $json.reply_text } }}",
+        "responseCode": 200,
+        "options": {
+          "responseFormat": "json"
+        }
+      },
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        -120
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook: Voice Intake": {
+      "main": [
+        [
+          {
+            "node": "Route Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Intent": {
+      "main": [
+        [
+          {
+            "node": "IF Weather",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "IF Crypto",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fn: Fallback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Weather": {
+      "main": [
+        [
+          {
+            "node": "HTTP: Geocode City",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "HTTP: Geocode City": {
+      "main": [
+        [
+          {
+            "node": "Fn: Extract Lat/Lon",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fn: Extract Lat/Lon": {
+      "main": [
+        [
+          {
+            "node": "HTTP: Get Weather",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge: Weather + City",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP: Get Weather": {
+      "main": [
+        [
+          {
+            "node": "Merge: Weather + City",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge: Weather + City": {
+      "main": [
+        [
+          {
+            "node": "Fn: Format Weather Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fn: Format Weather Reply": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Crypto": {
+      "main": [
+        [
+          {
+            "node": "HTTP: Crypto Price",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "HTTP: Crypto Price": {
+      "main": [
+        [
+          {
+            "node": "Fn: Format Crypto Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fn: Format Crypto Reply": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fn: Fallback": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

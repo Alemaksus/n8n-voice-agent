@@ -1,0 +1,446 @@
+{
+  "name": "Crypto + Weather",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "voice/intake",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook: Voice Intake",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -736,
+        240
+      ],
+      "id": "bbc8e33c-d15b-4e37-8dd5-0a41213e14a7",
+      "webhookId": "bd85bb53-65bb-4994-a354-ea9dd2da5aa4"
+    },
+    {
+      "parameters": {
+        "jsCode": "const t = ($json.body?.transcript || '').trim();\n\nlet intent = '';\nlet city   = '';\nlet symbol = '';\nlet when   = 'today'; // today | tomorrow\n\n// --- Крипта ---\nconst mCrypto = t.match(/\\b(btc|bitcoin|eth|ethereum)\\b/i);\nif (mCrypto) {\n  intent = 'crypto';\n  const map = { btc:'bitcoin', bitcoin:'bitcoin', eth:'ethereum', ethereum:'ethereum' };\n  symbol = map[mCrypto[1].toLowerCase()];\n}\n\n// --- Погода ---\nif (!intent && /(weather|temperature|погода|температура)/i.test(t)) {\n  intent = 'weather';\n\n  // когда?\n  if (/\\b(tomorrow|завтра)\\b/i.test(t)) when = 'tomorrow';\n\n  // город после \"in\"/\"в\"\n  const mCity = t.match(/\\b(?:in|в)\\s+([a-z\\u0400-\\u04FF-]+(?:\\s+[a-z\\u0400-\\u04FF-]+)*)/i);\n  if (mCity) {\n    city = mCity[1]\n      // выкидываем служебные слова и хвостовую пунктуацию\n      .replace(/\\b(today|tomorrow|now|сегодня|завтра)\\b/gi, '')\n      .replace(/[.,!?;:]+$/, '')\n      .trim();\n  }\n}\n\nreturn [{ json: { ...$json, intent, city, symbol, when } }];\n"
+      },
+      "name": "Route Intent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        240
+      ],
+      "id": "c4189a32-9108-457d-862e-064ddaf5af39"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "7af04b58-1075-42c9-95e7-114ad68313fc",
+              "leftValue": "={{ $json.intent }}",
+              "rightValue": "weather",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "IF Weather",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -400,
+        144
+      ],
+      "id": "7e373b9d-9f08-4126-b5a0-b85f33b05273"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "f1dc107d-a447-4fbb-a10f-1c0b3bc8da63",
+              "leftValue": "={{ $json.intent }}",
+              "rightValue": "crypto",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "IF Crypto",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -224,
+        368
+      ],
+      "id": "d263eed7-4c8c-45b9-890d-8d03ae586983"
+    },
+    {
+      "parameters": {
+        "url": "https://geocoding-api.open-meteo.com/v1/search",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "name",
+              "value": "={{$json.city || 'Lisbon'}}"
+            },
+            {
+              "name": "count",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "HTTP: Geocode City",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -208,
+        -16
+      ],
+      "id": "30244e26-4f2c-4135-a799-af9760e72728"
+    },
+    {
+      "parameters": {
+        "jsCode": "const r    = $json.results?.[0];\nconst lat  = r?.latitude;\nconst lon  = r?.longitude;\nconst city = r?.name || '';\n\nlet when = 'today';\ntry {\n  when = $items('Route Intent')[0].json.when || 'today';\n} catch (e) {}\n\nreturn [{ json: { lat, lon, city, when } }];\n"
+      },
+      "name": "Fn: Extract Lat/Lon",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -16,
+        -16
+      ],
+      "id": "02393520-ade2-4bb8-a604-d61158764369"
+    },
+    {
+      "parameters": {
+        "url": "https://api.open-meteo.com/v1/forecast",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "latitude",
+              "value": "={{$json.lat}}"
+            },
+            {
+              "name": "longitude",
+              "value": "={{$json.lon}}"
+            },
+            {
+              "name": "current_weather",
+              "value": "true"
+            },
+            {
+              "name": "daily",
+              "value": "temperature_2m_min,temperature_2m_max,weathercode"
+            },
+            {
+              "name": "forecast_days",
+              "value": "2"
+            },
+            {
+              "name": "timezone",
+              "value": "auto"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "HTTP: Get Weather",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        160,
+        64
+      ],
+      "id": "aa2dd34c-7755-423c-b912-56f7efeae301"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combinationMode": "mergeByPosition",
+        "options": {}
+      },
+      "name": "Merge: Weather + City",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [
+        352,
+        -16
+      ],
+      "id": "a98ace7f-06b7-42f8-aa8d-c342fed568fe"
+    },
+    {
+      "parameters": {
+        "jsCode": "const city = $json.city || 'your city';\nconst when = $json.when || 'today';\n\n// === завтра (прогноз) ===\nif (when === 'tomorrow') {\n  const d = $json.daily || {};\n  const min = Array.isArray(d.temperature_2m_min) ? d.temperature_2m_min[1] : null;\n  const max = Array.isArray(d.temperature_2m_max) ? d.temperature_2m_max[1] : null;\n  const units = ($json.daily_units && ($json.daily_units.temperature_2m_max || '°C')) || '°C';\n\n  if (min == null || max == null) {\n    return [{ json: { reply_text: `I couldn't get tomorrow's forecast for ${city}.` } }];\n  }\n  return [{ json: { reply_text: `Tomorrow in ${city}: ${min}…${max} ${units}.` } }];\n}\n\n// === сегодня (сейчас, либо fallback на daily[0]) ===\nconst cw = $json.current_weather || {};\nconst cwUnits = ($json.current_weather_units && ($json.current_weather_units.temperature || '°C')) || '°C';\n\nif (cw.temperature != null) {\n  return [{ json: { reply_text: `Now in ${city} it's ${cw.temperature} ${cwUnits}.` } }];\n}\n\n// fallback на daily[0], если current_weather нет\nconst d = $json.daily || {};\nconst min0 = Array.isArray(d.temperature_2m_min) ? d.temperature_2m_min[0] : null;\nconst max0 = Array.isArray(d.temperature_2m_max) ? d.temperature_2m_max[0] : null;\nconst dUnits = ($json.daily_units && ($json.daily_units.temperature_2m_max || '°C')) || '°C';\n\nif (min0 != null && max0 != null) {\n  return [{ json: { reply_text: `Today in ${city}: ${min0}…${max0} ${dUnits}.` } }];\n}\n\nreturn [{ json: { reply_text: `I couldn't get the current weather for ${city}.` } }];\n"
+      },
+      "name": "Fn: Format Weather Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        528,
+        -16
+      ],
+      "id": "7fc1ac0c-c29a-4f0a-8435-9d1a16a092d9"
+    },
+    {
+      "parameters": {
+        "url": "https://api.coingecko.com/api/v3/simple/price",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "ids",
+              "value": "={{$json.symbol || 'bitcoin'}}"
+            },
+            {
+              "name": "vs_currencies",
+              "value": "usd,eur"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "HTTP: Crypto Price",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -16,
+        240
+      ],
+      "id": "d10288d0-0bba-4b67-a407-951d87b06897"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Ответ CoinGecko: { bitcoin: { usd: 123, eur: 115 } } / { ethereum: {...} }\nconst sym  = Object.keys($json)[0] ?? 'bitcoin';\nconst data = $json[sym] || {};\nconst usd  = data.usd;\nconst eur  = data.eur;\n\nif (usd == null && eur == null) {\n  return [{ json: { reply_text: `I couldn't get the price for ${sym}.` } }];\n}\n\nconst name  = sym.charAt(0).toUpperCase() + sym.slice(1);\nconst parts = [];\nif (usd != null) parts.push(`${usd} USD`);\nif (eur != null) parts.push(`${eur} EUR`);\n\nreturn [{ json: { reply_text: `${name} price is ${parts.join(' / ')}.` } }];\n"
+      },
+      "name": "Fn: Format Crypto Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        160,
+        240
+      ],
+      "id": "d32eb622-a245-4973-941c-8bd70d16ef2f"
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { reply_text: \"Sorry, I can answer about weather or crypto. Try 'weather in Lisbon' or 'btc price'.\" } }];\n"
+      },
+      "name": "Fn: Fallback",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        160,
+        384
+      ],
+      "id": "4915ef40-b131-4959-8b86-9ed884328d6f"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"reply_text\": $json.reply_text } }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        720,
+        240
+      ],
+      "id": "ccfa5ad3-82e0-422b-9051-4a67d8410a9e",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook: Voice Intake": {
+      "main": [
+        [
+          {
+            "node": "Route Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Intent": {
+      "main": [
+        [
+          {
+            "node": "IF Weather",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Weather": {
+      "main": [
+        [
+          {
+            "node": "HTTP: Geocode City",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF Crypto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP: Geocode City": {
+      "main": [
+        [
+          {
+            "node": "Fn: Extract Lat/Lon",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fn: Extract Lat/Lon": {
+      "main": [
+        [
+          {
+            "node": "HTTP: Get Weather",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge: Weather + City",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP: Get Weather": {
+      "main": [
+        [
+          {
+            "node": "Merge: Weather + City",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge: Weather + City": {
+      "main": [
+        [
+          {
+            "node": "Fn: Format Weather Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Crypto": {
+      "main": [
+        [
+          {
+            "node": "HTTP: Crypto Price",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fn: Fallback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP: Crypto Price": {
+      "main": [
+        [
+          {
+            "node": "Fn: Format Crypto Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fn: Format Weather Reply": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fn: Fallback": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fn: Format Crypto Reply": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "34ef0ef1-9421-4dc5-bf83-476f243c08a2",
+  "meta": {
+    "instanceId": "034056553c4c0bd835ed1617a9e03ff1e2a6417770b51a0e401828f415e1711f"
+  },
+  "id": "qHf77qvjlW1E5DG1",
+  "tags": []
+}

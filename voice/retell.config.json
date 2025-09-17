@@ -1,0 +1,46 @@
+{
+  "agent_id": "your_retell_agent_id_here",
+  "webhook_url": "http://localhost:5678/webhook/voice-webhook",
+  "voice_settings": {
+    "provider": "retell",
+    "voice_id": "alloy",
+    "speed": 1.0,
+    "temperature": 0.7,
+    "model": "gpt-3.5-turbo"
+  },
+  "conversation_settings": {
+    "max_duration_seconds": 300,
+    "end_call_after_silence_seconds": 10,
+    "interruption_threshold": 0.5,
+    "silence_timeout_seconds": 3
+  },
+  "audio_settings": {
+    "sample_rate": 24000,
+    "channels": 1,
+    "encoding": "pcm_mulaw"
+  },
+  "features": {
+    "interruption_detection": true,
+    "silence_detection": true,
+    "emotion_detection": false,
+    "sentiment_analysis": true
+  },
+  "fallback_responses": [
+    "I'm sorry, I didn't catch that. Could you please repeat?",
+    "Could you speak a bit louder? I'm having trouble hearing you.",
+    "I'm not sure I understand. Can you rephrase that?",
+    "Let me transfer you to a human agent."
+  ],
+  "escalation_keywords": [
+    "speak to human",
+    "agent",
+    "representative",
+    "supervisor",
+    "manager",
+    "complaint",
+    "angry",
+    "frustrated",
+    "disappointed"
+  ]
+}
+

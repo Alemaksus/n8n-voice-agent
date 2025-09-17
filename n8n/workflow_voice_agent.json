@@ -1,0 +1,293 @@
+{
+  "name": "Voice Agent Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "voice-webhook",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Voice Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "webhookId": "voice-agent-webhook"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-1",
+              "leftValue": "={{ $json.event_type }}",
+              "rightValue": "conversation_started",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "conversation-started",
+      "name": "Conversation Started?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract conversation data from voice provider\nconst eventType = $input.first().json.event_type;\nconst conversationData = $input.first().json;\n\n// Prepare response for voice agent\nlet response = {\n  response: \"Hello! I'm your voice assistant. How can I help you today?\",\n  end_call: false\n};\n\n// Handle different event types\nif (eventType === 'conversation_started') {\n  response.response = \"Hello! I'm your AI voice assistant. I can help you with weather information, cryptocurrency prices, and answer general questions. What would you like to know?\"\n} else if (eventType === 'user_message') {\n  const userMessage = conversationData.transcript || conversationData.message || '';\n  response.user_message = userMessage;\n  \n  // Check for goodbye phrases\n  const goodbyePhrases = ['goodbye', 'bye', 'see you', 'talk to you later', 'end call'];\n  if (goodbyePhrases.some(phrase => userMessage.toLowerCase().includes(phrase))) {\n    response.response = \"Thank you for calling! Have a great day!\"\n    response.end_call = true;\n  }\n}\n\nreturn {\n  json: response\n};"
+      },
+      "id": "process-voice-input",
+      "name": "Process Voice Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "weather-condition",
+              "leftValue": "={{ $json.user_message.toLowerCase() }}",
+              "rightValue": "weather",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-weather-request",
+      "name": "Weather Request?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "crypto-condition",
+              "leftValue": "={{ $json.user_message.toLowerCase() }}",
+              "rightValue": "crypto",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "check-crypto-request",
+      "name": "Crypto Request?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 400]
+    },
+    {
+      "parameters": {
+        "url": "https://api.open-meteo.com/v1/forecast",
+        "options": {
+          "qs": {
+            "latitude": "40.7128",
+            "longitude": "-74.0060",
+            "current": "temperature_2m,weather_code",
+            "timezone": "auto"
+          }
+        }
+      },
+      "id": "get-weather",
+      "name": "Get Weather",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 200]
+    },
+    {
+      "parameters": {
+        "url": "https://api.coingecko.com/api/v3/simple/price",
+        "options": {
+          "qs": {
+            "ids": "bitcoin,ethereum",
+            "vs_currencies": "usd"
+          }
+        }
+      },
+      "id": "get-crypto",
+      "name": "Get Crypto Prices",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 400]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process weather data and create response\nconst weatherData = $input.first().json;\nconst temperature = weatherData.current.temperature_2m;\nconst weatherCode = weatherData.current.weather_code;\n\n// Convert weather code to description\nconst weatherDescriptions = {\n  0: 'clear sky',\n  1: 'mainly clear',\n  2: 'partly cloudy',\n  3: 'overcast',\n  45: 'foggy',\n  48: 'depositing rime fog',\n  51: 'light drizzle',\n  53: 'moderate drizzle',\n  55: 'dense drizzle',\n  61: 'slight rain',\n  63: 'moderate rain',\n  65: 'heavy rain'\n};\n\nconst weatherDesc = weatherDescriptions[weatherCode] || 'unknown conditions';\nconst response = `The current weather is ${weatherDesc} with a temperature of ${temperature} degrees Celsius.`;\n\nreturn {\n  json: {\n    response: response,\n    end_call: false\n  }\n};"
+      },
+      "id": "format-weather-response",
+      "name": "Format Weather Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process crypto data and create response\nconst cryptoData = $input.first().json;\nconst btcPrice = cryptoData.bitcoin.usd;\nconst ethPrice = cryptoData.ethereum.usd;\n\nconst response = `Current cryptocurrency prices: Bitcoin is at $${btcPrice} USD and Ethereum is at $${ethPrice} USD.`;\n\nreturn {\n  json: {\n    response: response,\n    end_call: false\n  }\n};"
+      },
+      "id": "format-crypto-response",
+      "name": "Format Crypto Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}"
+      },
+      "id": "respond-to-voice",
+      "name": "Respond to Voice Agent",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1560, 300]
+    }
+  ],
+  "connections": {
+    "Voice Webhook": {
+      "main": [
+        [
+          {
+            "node": "Conversation Started?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conversation Started?": {
+      "main": [
+        [
+          {
+            "node": "Process Voice Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Voice Input": {
+      "main": [
+        [
+          {
+            "node": "Weather Request?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Crypto Request?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weather Request?": {
+      "main": [
+        [
+          {
+            "node": "Get Weather",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crypto Request?": {
+      "main": [
+        [
+          {
+            "node": "Get Crypto Prices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Weather": {
+      "main": [
+        [
+          {
+            "node": "Format Weather Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Crypto Prices": {
+      "main": [
+        [
+          {
+            "node": "Format Crypto Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Weather Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Voice Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Crypto Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Voice Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-15T10:00:00.000Z",
+  "versionId": "1"
+}
+
