@@ -4,7 +4,13 @@ A voice-enabled AI agent built with n8n workflow automation.
 
 ## Overview
 
-This project implements a voice agent that can handle conversations, process requests, and integrate with various APIs through n8n workflows.
+N8N Voice Agent is an experimental project exploring the architecture of an AI-powered voice agent built on the n8n workflow automation platform.
+
+The agent receives a voice input, converts it to text (Speech-to-Text), processes it via LLM API, and generates a spoken response (Text-to-Speech).
+
+This project serves as an R&D sandbox for integrating AI models into voice workflows and designing QA validation methods for dialogs — verifying response accuracy, timing consistency, and speech generation quality.
+
+Planned next step: integrate automated test hooks for validating agent response quality and audio output metrics.
 
 ## Project Structure
 
